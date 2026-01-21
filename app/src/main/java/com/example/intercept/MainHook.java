@@ -8,21 +8,26 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
+import android.util.Log;
+
 public class MainHook implements IXposedHookLoadPackage {
+    private static final String TAG = "ActivityInterceptor";
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        // LSPosed 模块通常在管理界面选择目标应用，所以这里可以不进行包名过滤
-        // 如果想在代码中硬编码包名，可以取消下面的注释：
-        
+        // 使用 Log.d 打印，可以在 Logcat 中通过 TAG "ActivityInterceptor" 过滤
+        Log.d(TAG, "模块已加载到包: " + lpparam.packageName);
+        XposedBridge.log(TAG + ": 模块已加载到包: " + lpparam.packageName);
+
+        // 如果你勾选了多个应用，这里可以用 if 过滤
+        // 为了调试，建议初次尝试时先注释掉过滤逻辑，或者确保 packageName 匹配无误
+        /*
         if (!lpparam.packageName.equals("com.miui.securitycenter")) {
             return;
         }
-        
+        */
 
-        XposedBridge.log("ActivityInterceptor: 正在拦截应用 -> " + lpparam.packageName);
-
-        // Hook Activity 的 onCreate 方法
+        // Hook 所有 Activity 的 onCreate
         XposedHelpers.findAndHookMethod(
             "android.app.Activity", 
             lpparam.classLoader, 
@@ -33,21 +38,19 @@ public class MainHook implements IXposedHookLoadPackage {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     Activity activity = (Activity) param.thisObject;
                     String activityName = activity.getClass().getName();
+                    
+                    Log.d(TAG, "检测到 Activity 启动: " + activityName);
+                    XposedBridge.log(TAG + ": 检测到 Activity 启动: " + activityName);
 
-                    // 在这里定义你想要拦截的 Activity 类名（完整路径）
-                    // 你可以使用 if 语句或 Switch 来匹配
-                    if (activityName.equals("com.miui.securityscan.MainActivity") || 
-                        activityName.contains("TargetSecretActivity")) {
+                    // 检查类名是否包含目标字符串
+                    if (activityName.contains("com.miui.securityscan.MainActivity") || 
+                        activityName.contains("securitycenter")) {
                         
-                        XposedBridge.log("ActivityInterceptor: 命中拦截规则 -> " + activityName);
+                        Log.w(TAG, "!! 命中拦截规则 !! -> " + activityName);
+                        XposedBridge.log(TAG + ": !! 命中拦截规则 !! -> " + activityName);
                         
-                        // 拦截并关闭
+                        // 拦截
                         activity.finish();
-                        
-                        XposedBridge.log("ActivityInterceptor: 已成功拦截并关闭 Activity: " + activityName);
-                    } else {
-                        // 如果不匹配，则放行
-                        XposedBridge.log("ActivityInterceptor: 放行 Activity -> " + activityName);
                     }
                 }
             }
