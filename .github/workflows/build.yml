@@ -21,12 +21,17 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-      continue-on-error: true
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
 
     - name: Build with Gradle
-      run: ./gradlew assembleRelease
+      run: |
+        if [ -f "./gradlew" ]; then
+          chmod +x gradlew
+          ./gradlew assembleRelease
+        else
+          gradle assembleRelease
+        fi
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
