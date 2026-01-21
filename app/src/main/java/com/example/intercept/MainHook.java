@@ -14,11 +14,11 @@ public class MainHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         // LSPosed 模块通常在管理界面选择目标应用，所以这里可以不进行包名过滤
         // 如果想在代码中硬编码包名，可以取消下面的注释：
-        /*
-        if (!lpparam.packageName.equals("com.example.targetapp")) {
+        
+        if (!lpparam.packageName.equals("com.miui.securitycenter")) {
             return;
         }
-        */
+        
 
         XposedBridge.log("ActivityInterceptor: 正在拦截应用 -> " + lpparam.packageName);
 
@@ -36,7 +36,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
                     // 在这里定义你想要拦截的 Activity 类名（完整路径）
                     // 你可以使用 if 语句或 Switch 来匹配
-                    if (activityName.equals("com.example.targetapp.SpecificActivity") || 
+                    if (activityName.equals("com.miui.securityscan.MainActivity") || 
                         activityName.contains("TargetSecretActivity")) {
                         
                         XposedBridge.log("ActivityInterceptor: 命中拦截规则 -> " + activityName);
