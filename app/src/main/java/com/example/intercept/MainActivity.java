@@ -57,6 +57,7 @@ public class MainActivity extends Activity {
         switchLogging.setChecked(isLoggingEnabled);
         switchLogging.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean("enable_logging", isChecked).apply();
+            fixPrefsPermissions();
             String msg = isChecked ? "日志记录已开启" : "日志记录已暂停";
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
         });
@@ -94,11 +95,21 @@ public class MainActivity extends Activity {
         }
         
         etRules.setText(rulesText);
+        fixPrefsPermissions();
+    }
+
+    private void fixPrefsPermissions() {
+        try {
+            Runtime.getRuntime().exec(new String[]{"su", "-c", "chmod 666 /data/data/com.example.intercept/shared_prefs/" + PREFS_NAME + ".xml"}).waitFor();
+        } catch (Exception e) {
+            Log.e(TAG, "Error fixing prefs permissions", e);
+        }
     }
 
     private void saveRules() {
         String rulesText = etRules.getText().toString();
         prefs.edit().putString("rules_text", rulesText).apply();
+        fixPrefsPermissions();
         Toast.makeText(this, "规则已保存，重启目标应用后生效", Toast.LENGTH_SHORT).show();
     }
 
