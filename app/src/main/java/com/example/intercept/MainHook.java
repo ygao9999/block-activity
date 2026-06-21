@@ -122,7 +122,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     java.util.Locale.getDefault()).format(new java.util.Date());
                 String logLine = String.format("[%s] Package: %s | Activity: %s\n", time, fpkg, fcls);
 
-                java.io.File logFile = new java.io.File("/data/system/intercept_logs.txt");
+                java.io.File logFile = new java.io.File("/data/local/tmp/intercept_logs.txt");
                 try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
                     fw.write(logLine);
                 }

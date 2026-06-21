@@ -110,13 +110,10 @@ public class MainActivity extends Activity {
     }
 
     private void initGlobalLogFile() {
-        // 用 Root 权限预先创建全局日志文件，并设置正确的 SELinux 安全上下文
-        // 这样 system_server 进程才能往里面追加写入日志
+        // 用 Root 权限预先创建全局日志文件，确保 system_server 可写入
         new Thread(() -> {
             try {
-                String cmd = "touch /data/system/intercept_logs.txt && " +
-                    "chcon u:object_r:system_data_file:s0 /data/system/intercept_logs.txt && " +
-                    "chmod 666 /data/system/intercept_logs.txt";
+                String cmd = "touch /data/local/tmp/intercept_logs.txt && chmod 666 /data/local/tmp/intercept_logs.txt";
                 Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
                 p.waitFor();
             } catch (Exception e) {
@@ -137,7 +134,7 @@ public class MainActivity extends Activity {
             StringBuilder sb = new StringBuilder();
             // 优先读取全局日志（system_server 写入的）
             try {
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/intercept_logs.txt 2>/dev/null"});
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/local/tmp/intercept_logs.txt 2>/dev/null"});
                 BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
                 String line;
                 while ((line = br.readLine()) != null) {
@@ -174,7 +171,7 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             // 清除全局日志
             try {
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "echo -n > /data/system/intercept_logs.txt"});
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "echo -n > /data/local/tmp/intercept_logs.txt"});
                 p.waitFor();
             } catch (Exception e) {
                 Log.e(TAG, "Error clearing global logs", e);
