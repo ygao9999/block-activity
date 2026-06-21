@@ -126,8 +126,9 @@ public class MainHook implements IXposedHookLoadPackage {
                 try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
                     fw.write(logLine);
                 }
-            } catch (Throwable ignored) {
-                // 写入失败也吞掉，绝不影响系统运行
+            } catch (Throwable t) {
+                // 写入失败时记录到 Xposed 日志便于排查，但绝不影响系统运行
+                XposedBridge.log(TAG + ": 全局日志写入失败: " + t.getMessage());
             }
         });
     }

@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
         });
 
+        initGlobalLogFile();
         loadRules();
         loadLogs();
     }
@@ -104,6 +105,22 @@ public class MainActivity extends Activity {
                 Runtime.getRuntime().exec(new String[]{"su", "-c", "chmod 666 /data/data/com.example.intercept/shared_prefs/" + PREFS_NAME + ".xml"}).waitFor();
             } catch (Exception e) {
                 Log.e(TAG, "Error fixing prefs permissions", e);
+            }
+        }).start();
+    }
+
+    private void initGlobalLogFile() {
+        // 用 Root 权限预先创建全局日志文件，并设置正确的 SELinux 安全上下文
+        // 这样 system_server 进程才能往里面追加写入日志
+        new Thread(() -> {
+            try {
+                String cmd = "touch /data/system/intercept_logs.txt && " +
+                    "chcon u:object_r:system_data_file:s0 /data/system/intercept_logs.txt && " +
+                    "chmod 666 /data/system/intercept_logs.txt";
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+                p.waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Error initializing global log file", e);
             }
         }).start();
     }
