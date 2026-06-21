@@ -55,7 +55,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Activity 启动日志 (logs.txt)"
+        android:text="Activity 启动日志 (Logcat)"
         android:textStyle="bold"
         android:layout_marginTop="24dp"
         android:layout_marginBottom="8dp"/>

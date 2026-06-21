@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Telephony;
@@ -16,143 +17,103 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.InputStreamReader;
 
 public class MainActivity extends Activity {
     private static final String TAG = "ActivityInterceptor";
+    private static final String PREFS_NAME = "intercept_config";
 
     private EditText etRules;
     private TextView tvLogs;
+    private SharedPreferences prefs;
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // MODE_WORLD_READABLE 使 XSharedPreferences 可在 Hook 模块中直接本地读取
+        // LSPosed 对此做了兼容处理
+        try {
+            prefs = getSharedPreferences(PREFS_NAME, MODE_WORLD_READABLE);
+        } catch (SecurityException e) {
+            prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            Log.w(TAG, "MODE_WORLD_READABLE 不可用，回退到 MODE_PRIVATE", e);
+        }
+
         // Secret Code Features
         Button btnRegister = findViewById(R.id.btn_register_secret_code);
-        btnRegister.setOnClickListener(v -> {
-            registerSecretCodeReceiver();
-        });
+        btnRegister.setOnClickListener(v -> registerSecretCodeReceiver());
 
         Button btnTrigger = findViewById(R.id.btn_trigger_secret_code);
-        btnTrigger.setOnClickListener(v -> {
-            triggerSecretCode("6776799");
-        });
+        btnTrigger.setOnClickListener(v -> triggerSecretCode("6776799"));
 
-        // Rules and Logs UI Bindings
+        // 拦截规则
         etRules = findViewById(R.id.et_rules);
         tvLogs = findViewById(R.id.tv_logs);
 
         Button btnSaveRules = findViewById(R.id.btn_save_rules);
-        btnSaveRules.setOnClickListener(v -> {
-            saveRules();
-        });
+        btnSaveRules.setOnClickListener(v -> saveRules());
 
         Button btnRefreshLogs = findViewById(R.id.btn_refresh_logs);
-        btnRefreshLogs.setOnClickListener(v -> {
-            loadLogs();
-        });
+        btnRefreshLogs.setOnClickListener(v -> loadLogs());
 
         Button btnClearLogs = findViewById(R.id.btn_clear_logs);
-        btnClearLogs.setOnClickListener(v -> {
-            clearLogs();
-        });
+        btnClearLogs.setOnClickListener(v -> clearLogs());
 
-        // Initial Load
         loadRules();
         loadLogs();
     }
 
-    private File getRulesFile() {
-        File dir = getFilesDir();
-        File file = new File(dir, "rules.txt");
-        if (!file.exists()) {
-            try {
-                file.createNewFile();
-            } catch (Exception e) {
-                Log.e(TAG, "Error creating rules file", e);
-            }
-        }
-        return file;
-    }
-
-    private File getLogsFile() {
-        File dir = getFilesDir();
-        File file = new File(dir, "logs.txt");
-        if (!file.exists()) {
-            try {
-                file.createNewFile();
-            } catch (Exception e) {
-                Log.e(TAG, "Error creating logs file", e);
-            }
-        }
-        return file;
-    }
-
     private void loadRules() {
-        File file = getRulesFile();
-        if (file == null || !file.exists()) return;
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error reading rules", e);
-        }
-        etRules.setText(sb.toString().trim());
+        String rulesText = prefs.getString("rules_text", "");
+        etRules.setText(rulesText);
     }
 
     private void saveRules() {
-        File file = getRulesFile();
-        if (file == null) return;
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-            bw.write(etRules.getText().toString());
-            Toast.makeText(this, "规则保存成功！", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Log.e(TAG, "Error saving rules", e);
-            Toast.makeText(this, "规则保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
+        String rulesText = etRules.getText().toString();
+        prefs.edit().putString("rules_text", rulesText).apply();
+        Toast.makeText(this, "规则已保存，重启目标应用后生效", Toast.LENGTH_SHORT).show();
     }
 
     private void loadLogs() {
-        File file = getLogsFile();
-        if (file == null || !file.exists()) {
-            tvLogs.setText("暂无日志文件");
-            return;
-        }
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line).append("\n");
+        new Thread(() -> {
+            StringBuilder sb = new StringBuilder();
+            try {
+                Process process = Runtime.getRuntime().exec(
+                    new String[]{"logcat", "-d", "-s", TAG + ":*"});
+                BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line).append("\n");
+                }
+                reader.close();
+                process.waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Error reading logcat", e);
+                sb.append("读取日志失败: ").append(e.getMessage());
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Error reading logs", e);
-        }
-        String logsText = sb.toString().trim();
-        if (logsText.isEmpty()) {
-            tvLogs.setText("暂无日志");
-        } else {
-            tvLogs.setText(logsText);
-        }
+            String logsText = sb.toString().trim();
+            runOnUiThread(() -> {
+                tvLogs.setText(logsText.isEmpty() ? "暂无日志" : logsText);
+            });
+        }).start();
     }
 
     private void clearLogs() {
-        File file = getLogsFile();
-        if (file == null) return;
-        try (FileWriter fw = new FileWriter(file, false)) {
-            // Clear content
-            tvLogs.setText("暂无日志");
-            Toast.makeText(this, "日志已清除", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Log.e(TAG, "Error clearing logs", e);
-        }
+        new Thread(() -> {
+            try {
+                Runtime.getRuntime().exec("logcat -c").waitFor();
+                runOnUiThread(() -> {
+                    tvLogs.setText("日志已清除");
+                    Toast.makeText(this, "日志已清除", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Error clearing logcat", e);
+            }
+        }).start();
     }
 
     private void triggerSecretCode(String code) {
