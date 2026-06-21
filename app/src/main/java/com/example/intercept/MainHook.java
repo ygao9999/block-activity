@@ -40,6 +40,22 @@ public class MainHook implements IXposedHookLoadPackage {
                     Log.d(TAG, "Activity启动 | " + packageName + " | " + activityName);
                     XposedBridge.log(TAG + ": Activity启动 | " + packageName + " | " + activityName);
 
+                    // 异步调用 ContentProvider 写日志，全天持久化且不卡主线程
+                    new Thread(() -> {
+                        try {
+                            Bundle extras = new Bundle();
+                            extras.putString("packageName", packageName);
+                            activity.getContentResolver().call(
+                                android.net.Uri.parse("content://com.example.intercept.provider"),
+                                "logActivity",
+                                activityName,
+                                extras
+                            );
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error async logging activity", e);
+                        }
+                    }).start();
+
                     // 本地读取规则判断是否拦截
                     if (shouldIntercept(activityName, packageName)) {
                         Log.w(TAG, "!! 拦截 !! | " + packageName + " | " + activityName);
