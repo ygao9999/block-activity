@@ -81,8 +81,9 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             StringBuilder sb = new StringBuilder();
             try {
+                // 小米 MIUI/HyperOS 上普通 App 无权读取 logcat，需要 Root
                 Process process = Runtime.getRuntime().exec(
-                    new String[]{"logcat", "-d", "-s", TAG + ":*"});
+                    new String[]{"su", "-c", "logcat -d -s " + TAG + ":*"});
                 BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream()));
                 String line;
@@ -105,7 +106,7 @@ public class MainActivity extends Activity {
     private void clearLogs() {
         new Thread(() -> {
             try {
-                Runtime.getRuntime().exec("logcat -c").waitFor();
+                Runtime.getRuntime().exec(new String[]{"su", "-c", "logcat -c"}).waitFor();
                 runOnUiThread(() -> {
                     tvLogs.setText("日志已清除");
                     Toast.makeText(this, "日志已清除", Toast.LENGTH_SHORT).show();
