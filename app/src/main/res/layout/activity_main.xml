@@ -14,19 +14,6 @@
         android:textStyle="bold"
         android:layout_marginBottom="32dp"/>
 
-    <Button
-        android:id="@+id/btn_register_secret_code"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Register Secret Code Receiver" />
-
-    <Button
-        android:id="@+id/btn_trigger_secret_code"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Trigger Secret Code (6776799)"
-        android:layout_marginTop="16dp" />
-
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
