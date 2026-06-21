@@ -86,6 +86,11 @@ public class MainHook implements IXposedHookLoadPackage {
                     if (intercept) {
                         Log.w(TAG, "!! 拦截触发 (onCreate 之前) !! -> " + activityName);
                         XposedBridge.log(TAG + ": !! 拦截触发 (onCreate 之前) !! -> " + activityName);
+                        try {
+                            Toast.makeText(activity, "已拦截启动: " + activityName, Toast.LENGTH_SHORT).show();
+                        } catch (Exception e) {
+                            Log.e(TAG, "Failed to show intercept toast", e);
+                        }
                         activity.finish();
                         activity.finishAndRemoveTask();
                     }
