@@ -27,4 +27,75 @@
         android:text="Trigger Secret Code (6776799)"
         android:layout_marginTop="16dp" />
 
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="拦截规则配置 (rules.txt)"
+        android:textStyle="bold"
+        android:layout_marginTop="24dp"
+        android:layout_marginBottom="8dp"/>
+
+    <EditText
+        android:id="@+id/et_rules"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:gravity="top"
+        android:hint="每行一个包名或Activity类名，支持包含匹配"
+        android:inputType="textMultiLine"
+        android:scrollbars="vertical"
+        android:background="@android:drawable/editbox_background"/>
+
+    <Button
+        android:id="@+id/btn_save_rules"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="保存拦截规则"
+        android:layout_marginTop="8dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Activity 启动日志 (logs.txt)"
+        android:textStyle="bold"
+        android:layout_marginTop="24dp"
+        android:layout_marginBottom="8dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_refresh_logs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="刷新日志"/>
+
+        <Button
+            android:id="@+id/btn_clear_logs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="清除日志"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:background="#F0F0F0"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/tv_logs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="暂无日志"
+            android:textSize="12sp"/>
+    </ScrollView>
+
 </LinearLayout>
