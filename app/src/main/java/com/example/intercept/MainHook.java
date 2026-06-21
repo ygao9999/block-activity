@@ -71,42 +71,51 @@ public class MainHook implements IXposedHookLoadPackage {
             }
 
             if (intent != null) {
-                String packageName = "unknown";
-                String activityName = "unknown";
+                String pkg = "unknown";
+                String act = "unknown";
                 
                 if (intent.getComponent() != null) {
-                    packageName = intent.getComponent().getPackageName();
-                    activityName = intent.getComponent().getClassName();
+                    pkg = intent.getComponent().getPackageName();
+                    act = intent.getComponent().getClassName();
                 } else {
-                    packageName = intent.getPackage() != null ? intent.getPackage() : "implicit";
-                    activityName = intent.getAction() != null ? intent.getAction() : "implicit";
+                    pkg = intent.getPackage() != null ? intent.getPackage() : "implicit";
+                    act = intent.getAction() != null ? intent.getAction() : "implicit";
                 }
+
+                final String packageName = pkg;
+                final String activityName = act;
 
                 // 打印到 Xposed 日志用于调试验证
                 XposedBridge.log(TAG + ": ATMS 捕获到启动请求 -> " + packageName + " | " + activityName);
                 
-                if (prefs == null) {
-                    prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
-                    prefs.makeWorldReadable();
-                }
-                prefs.reload();
-                if (!prefs.getBoolean("enable_logging", true)) {
-                    return;
-                }
+                // ！！！致命错误修复：绝对不能在 ATMS 核心调度线程进行磁盘 IO，否则会导致系统点击无反应！！！
+                new Thread(() -> {
+                    try {
+                        if (prefs == null) {
+                            prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
+                            prefs.makeWorldReadable();
+                        }
+                        prefs.reload();
+                        if (!prefs.getBoolean("enable_logging", true)) {
+                            return;
+                        }
 
-                String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
-                String logLine = String.format("[%s] Package: %s | Activity: %s\n", time, packageName, activityName);
-                
-                // 改用 /data/system/ 因为 system_server 写入 /data/local/tmp 可能被 SELinux 拒绝
-                java.io.File logFile = new java.io.File("/data/system/intercept_logs.txt");
-                try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
-                    fw.write(logLine);
-                }
-                logFile.setReadable(true, false);
-                logFile.setWritable(true, false);
+                        String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
+                        String logLine = String.format("[%s] Package: %s | Activity: %s\n", time, packageName, activityName);
+                        
+                        java.io.File logFile = new java.io.File("/data/system/intercept_logs.txt");
+                        try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
+                            fw.write(logLine);
+                        }
+                        logFile.setReadable(true, false);
+                        logFile.setWritable(true, false);
+                    } catch (Throwable t) {
+                        XposedBridge.log(TAG + ": Error in async logging: " + android.util.Log.getStackTraceString(t));
+                    }
+                }).start();
             }
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": Error in global logging: " + android.util.Log.getStackTraceString(t));
+            XposedBridge.log(TAG + ": Error extracting intent: " + android.util.Log.getStackTraceString(t));
         }
     }
 
