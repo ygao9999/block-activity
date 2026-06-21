@@ -68,10 +68,7 @@ public class MainActivity extends Activity {
     }
 
     private File getRulesFile() {
-        File dir = getExternalFilesDir(null);
-        if (dir == null) {
-            dir = getFilesDir();
-        }
+        File dir = getFilesDir();
         File file = new File(dir, "rules.txt");
         if (!file.exists()) {
             try {
@@ -84,10 +81,7 @@ public class MainActivity extends Activity {
     }
 
     private File getLogsFile() {
-        File dir = getExternalFilesDir(null);
-        if (dir == null) {
-            dir = getFilesDir();
-        }
+        File dir = getFilesDir();
         File file = new File(dir, "logs.txt");
         if (!file.exists()) {
             try {

@@ -50,10 +50,7 @@ public class ConfigProvider extends ContentProvider {
     private File getRulesFile() {
         Context context = getContext();
         if (context == null) return null;
-        File dir = context.getExternalFilesDir(null);
-        if (dir == null) {
-            dir = context.getFilesDir();
-        }
+        File dir = context.getFilesDir();
         File file = new File(dir, "rules.txt");
         if (!file.exists()) {
             try {
@@ -76,10 +73,7 @@ public class ConfigProvider extends ContentProvider {
     private File getLogsFile() {
         Context context = getContext();
         if (context == null) return null;
-        File dir = context.getExternalFilesDir(null);
-        if (dir == null) {
-            dir = context.getFilesDir();
-        }
+        File dir = context.getFilesDir();
         File file = new File(dir, "logs.txt");
         if (!file.exists()) {
             try {
