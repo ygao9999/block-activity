@@ -150,31 +150,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     String activityName = activity.getClass().getName();
                     String packageName = lpparam.packageName;
 
-                    // 通过 ContentProvider 同步查询拦截规则
-                    boolean intercept = false;
-                    try {
-                        Bundle extras = new Bundle();
-                        extras.putString("packageName", packageName);
-                        Bundle result = activity.getContentResolver().call(
-                            Uri.parse("content://com.example.intercept.provider"),
-                            "shouldIntercept",
-                            activityName,
-                            extras
-                        );
-                        if (result != null) {
-                            intercept = result.getBoolean("intercept", false);
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error querying provider for rules", e);
-                        // 终极保底：ContentProvider 挂了就用硬编码规则
-                        XposedBridge.log(TAG + ": 警告 - ContentProvider 查询失败，激活硬编码保底！");
-                        if (activityName.contains("com.miui.securityscan.MainActivity") ||
-                            activityName.contains("com.miui.securityscan.MainEntryActivity")) {
-                            intercept = true;
-                        }
-                    }
-
-                    if (intercept) {
+                    if (shouldIntercept(activityName, packageName)) {
                         Log.w(TAG, "!! 拦截 !! | " + packageName + " | " + activityName);
                         XposedBridge.log(TAG + ": !! 拦截 !! | " + packageName + " | " + activityName);
                         activity.finish();
@@ -183,5 +159,38 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
             }
         );
+    }
+
+    private boolean shouldIntercept(String activityName, String packageName) {
+        try {
+            XSharedPreferences prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
+            prefs.makeWorldReadable();
+            prefs.reload();
+            String rulesText = prefs.getString("rules_text", "");
+            
+            if (rulesText.isEmpty()) {
+                return isHardcodedFallback(activityName, packageName);
+            }
+            
+            String[] rules = rulesText.split("\n");
+            for (String rule : rules) {
+                rule = rule.trim();
+                if (rule.isEmpty() || rule.startsWith("#") || rule.startsWith("//")) {
+                    continue;
+                }
+                if (activityName.contains(rule) || packageName.contains(rule)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": 警告 - 读取规则失败，激活硬编码保底！");
+            return isHardcodedFallback(activityName, packageName);
+        }
+    }
+
+    private boolean isHardcodedFallback(String activityName, String packageName) {
+        return activityName.contains("com.miui.securityscan.MainActivity") ||
+               activityName.contains("com.miui.securityscan.MainEntryActivity");
     }
 }
