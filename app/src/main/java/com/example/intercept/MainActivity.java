@@ -85,6 +85,12 @@ public class MainActivity extends Activity {
                     Log.e(TAG, "Error migrating old rules", e);
                 }
             }
+            
+            // 如果迁移后依然是空的（或者根本没有旧文件），就加上原版预置的两条规则
+            if (rulesText.isEmpty()) {
+                rulesText = "com.miui.securityscan.MainActivity\ncom.miui.securityscan.MainEntryActivity";
+                prefs.edit().putString("rules_text", rulesText).apply();
+            }
         }
         
         etRules.setText(rulesText);
