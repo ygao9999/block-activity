@@ -34,6 +34,8 @@ public class MainHook implements IXposedHookLoadPackage {
         }
 
         if (atmsClass != null) {
+            Log.d(TAG, "成功找到核心调度类: " + atmsClass.getName());
+            XposedBridge.log(TAG + ": 成功找到核心调度类: " + atmsClass.getName());
             XposedBridge.hookAllMethods(atmsClass, "startActivity", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -46,6 +48,15 @@ public class MainHook implements IXposedHookLoadPackage {
                     logIntent(param);
                 }
             });
+            // 兼容部分小米机型
+            XposedBridge.hookAllMethods(atmsClass, "startActivityAndWait", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    logIntent(param);
+                }
+            });
+        } else {
+            XposedBridge.log(TAG + ": 致命错误，未找到 ATMS/AMS 类！");
         }
     }
 
@@ -59,9 +70,20 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
             }
 
-            if (intent != null && intent.getComponent() != null) {
-                String packageName = intent.getComponent().getPackageName();
-                String activityName = intent.getComponent().getClassName();
+            if (intent != null) {
+                String packageName = "unknown";
+                String activityName = "unknown";
+                
+                if (intent.getComponent() != null) {
+                    packageName = intent.getComponent().getPackageName();
+                    activityName = intent.getComponent().getClassName();
+                } else {
+                    packageName = intent.getPackage() != null ? intent.getPackage() : "implicit";
+                    activityName = intent.getAction() != null ? intent.getAction() : "implicit";
+                }
+
+                // 打印到 Xposed 日志用于调试验证
+                XposedBridge.log(TAG + ": ATMS 捕获到启动请求 -> " + packageName + " | " + activityName);
                 
                 if (prefs == null) {
                     prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
@@ -75,7 +97,8 @@ public class MainHook implements IXposedHookLoadPackage {
                 String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
                 String logLine = String.format("[%s] Package: %s | Activity: %s\n", time, packageName, activityName);
                 
-                java.io.File logFile = new java.io.File("/data/local/tmp/intercept_logs.txt");
+                // 改用 /data/system/ 因为 system_server 写入 /data/local/tmp 可能被 SELinux 拒绝
+                java.io.File logFile = new java.io.File("/data/system/intercept_logs.txt");
                 try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
                     fw.write(logLine);
                 }
@@ -83,7 +106,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 logFile.setWritable(true, false);
             }
         } catch (Throwable t) {
-            Log.e(TAG, "Error in global logging", t);
+            XposedBridge.log(TAG + ": Error in global logging: " + android.util.Log.getStackTraceString(t));
         }
     }
 

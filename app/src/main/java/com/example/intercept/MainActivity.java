@@ -106,7 +106,7 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             StringBuilder sb = new StringBuilder();
             try {
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/local/tmp/intercept_logs.txt"});
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/intercept_logs.txt"});
                 BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
                 String line;
                 while ((line = br.readLine()) != null) {
@@ -128,7 +128,7 @@ public class MainActivity extends Activity {
     private void clearLogs() {
         new Thread(() -> {
             try {
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "rm -f /data/local/tmp/intercept_logs.txt && touch /data/local/tmp/intercept_logs.txt && chmod 666 /data/local/tmp/intercept_logs.txt"});
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "rm -f /data/system/intercept_logs.txt && touch /data/system/intercept_logs.txt && chmod 666 /data/system/intercept_logs.txt"});
                 p.waitFor();
             } catch (Exception e) {
                 Log.e(TAG, "Error clearing logs", e);
