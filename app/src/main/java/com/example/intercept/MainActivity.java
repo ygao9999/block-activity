@@ -113,7 +113,7 @@ public class MainActivity extends Activity {
         // 用 Root 权限预先创建全局日志文件，确保 system_server 可写入
         new Thread(() -> {
             try {
-                String cmd = "touch /data/local/tmp/intercept_logs.txt && chmod 666 /data/local/tmp/intercept_logs.txt";
+                String cmd = "touch /data/local/tmp/intercept_logs.txt && chown 1000:1000 /data/local/tmp/intercept_logs.txt && chmod 666 /data/local/tmp/intercept_logs.txt && (chcon u:object_r:system_data_file:s0 /data/local/tmp/intercept_logs.txt || true)";
                 Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
                 p.waitFor();
             } catch (Exception e) {
@@ -171,7 +171,8 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             // 清除全局日志
             try {
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "echo -n > /data/local/tmp/intercept_logs.txt"});
+                String cmd = "echo -n > /data/local/tmp/intercept_logs.txt && chown 1000:1000 /data/local/tmp/intercept_logs.txt && chmod 666 /data/local/tmp/intercept_logs.txt && (chcon u:object_r:system_data_file:s0 /data/local/tmp/intercept_logs.txt || true)";
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
                 p.waitFor();
             } catch (Exception e) {
                 Log.e(TAG, "Error clearing global logs", e);
