@@ -67,6 +67,26 @@ public class MainActivity extends Activity {
 
     private void loadRules() {
         String rulesText = prefs.getString("rules_text", "");
+        
+        // 如果 SharedPreferences 里没有规则，尝试从旧版本的 rules.txt 迁移，以免丢失默认规则
+        if (rulesText.isEmpty()) {
+            File oldRulesFile = new File(getFilesDir(), "rules.txt");
+            if (oldRulesFile.exists()) {
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new FileReader(oldRulesFile))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    rulesText = sb.toString().trim();
+                    // 迁移保存到 SharedPreferences
+                    prefs.edit().putString("rules_text", rulesText).apply();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error migrating old rules", e);
+                }
+            }
+        }
+        
         etRules.setText(rulesText);
     }
 
