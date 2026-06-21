@@ -50,6 +50,15 @@ public class ConfigProvider extends ContentProvider {
     }
 
     private synchronized void logActivityLaunch(String activityName, String packageName) {
+        Context context = getContext();
+        if (context == null) return;
+        
+        boolean isLoggingEnabled = context.getSharedPreferences("intercept_config", Context.MODE_PRIVATE)
+                .getBoolean("enable_logging", true);
+        if (!isLoggingEnabled) {
+            return;
+        }
+
         File file = getLogsFile();
         if (file == null) return;
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, true))) {

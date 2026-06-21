@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
         // 拦截规则
         etRules = findViewById(R.id.et_rules);
         tvLogs = findViewById(R.id.tv_logs);
+        android.widget.Switch switchLogging = findViewById(R.id.switch_enable_logging);
 
         Button btnSaveRules = findViewById(R.id.btn_save_rules);
         btnSaveRules.setOnClickListener(v -> saveRules());
@@ -50,6 +51,15 @@ public class MainActivity extends Activity {
 
         Button btnClearLogs = findViewById(R.id.btn_clear_logs);
         btnClearLogs.setOnClickListener(v -> clearLogs());
+
+        // 初始化日志开关
+        boolean isLoggingEnabled = prefs.getBoolean("enable_logging", true);
+        switchLogging.setChecked(isLoggingEnabled);
+        switchLogging.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("enable_logging", isChecked).apply();
+            String msg = isChecked ? "日志记录已开启" : "日志记录已暂停";
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+        });
 
         loadRules();
         loadLogs();
