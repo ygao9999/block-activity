@@ -102,32 +102,22 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "规则已保存，重启目标应用后生效", Toast.LENGTH_SHORT).show();
     }
 
-    private File getLogsFile() {
-        File dir = getFilesDir();
-        File file = new File(dir, "logs.txt");
-        if (!file.exists()) {
-            try { file.createNewFile(); } catch (Exception ignored) {}
-        }
-        return file;
-    }
-
     private void loadLogs() {
         new Thread(() -> {
-            File file = getLogsFile();
-            if (file == null || !file.exists()) {
-                runOnUiThread(() -> tvLogs.setText("暂无日志文件"));
-                return;
-            }
             StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/local/tmp/intercept_logs.txt"});
+                BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
                 String line;
                 while ((line = br.readLine()) != null) {
                     sb.append(line).append("\n");
                 }
+                p.waitFor();
             } catch (Exception e) {
-                Log.e(TAG, "Error reading logs", e);
-                sb.append("读取日志失败: ").append(e.getMessage());
+                Log.e(TAG, "Error reading global logs", e);
+                sb.append("读取日志失败 (请确保已授予Root权限): ").append(e.getMessage());
             }
+            
             String logsText = sb.toString().trim();
             runOnUiThread(() -> {
                 tvLogs.setText(logsText.isEmpty() ? "暂无日志" : logsText);
@@ -137,13 +127,11 @@ public class MainActivity extends Activity {
 
     private void clearLogs() {
         new Thread(() -> {
-            File file = getLogsFile();
-            if (file != null) {
-                try (FileWriter fw = new FileWriter(file, false)) {
-                    // overwrite with empty content
-                } catch (Exception e) {
-                    Log.e(TAG, "Error clearing logs", e);
-                }
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "rm -f /data/local/tmp/intercept_logs.txt && touch /data/local/tmp/intercept_logs.txt && chmod 666 /data/local/tmp/intercept_logs.txt"});
+                p.waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Error clearing logs", e);
             }
             runOnUiThread(() -> {
                 tvLogs.setText("暂无日志");

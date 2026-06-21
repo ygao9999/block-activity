@@ -17,10 +17,77 @@ public class MainHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        Log.d(TAG, "模块已加载到包: " + lpparam.packageName);
-        XposedBridge.log(TAG + ": 模块已加载到包: " + lpparam.packageName);
+        if ("android".equals(lpparam.packageName)) {
+            hookSystemServer(lpparam);
+        } else {
+            hookTargetApp(lpparam);
+        }
+    }
 
-        // 本地直接读取主 App 的 SharedPreferences 配置文件，无任何跨进程通信
+    private void hookSystemServer(XC_LoadPackage.LoadPackageParam lpparam) {
+        Log.d(TAG, "全局日志系统模块已加载到 system_server");
+        XposedBridge.log(TAG + ": 全局日志模块已加载到 system_server");
+
+        Class<?> atmsClass = XposedHelpers.findClassIfExists("com.android.server.wm.ActivityTaskManagerService", lpparam.classLoader);
+        if (atmsClass == null) {
+            atmsClass = XposedHelpers.findClassIfExists("com.android.server.am.ActivityManagerService", lpparam.classLoader);
+        }
+
+        if (atmsClass != null) {
+            XposedBridge.hookAllMethods(atmsClass, "startActivity", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    logIntent(param);
+                }
+            });
+            XposedBridge.hookAllMethods(atmsClass, "startActivityAsUser", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    logIntent(param);
+                }
+            });
+        }
+    }
+
+    private void logIntent(XC_MethodHook.MethodHookParam param) {
+        try {
+            android.content.Intent intent = null;
+            for (Object arg : param.args) {
+                if (arg instanceof android.content.Intent) {
+                    intent = (android.content.Intent) arg;
+                    break;
+                }
+            }
+
+            if (intent != null && intent.getComponent() != null) {
+                String packageName = intent.getComponent().getPackageName();
+                String activityName = intent.getComponent().getClassName();
+                
+                if (prefs == null) {
+                    prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
+                    prefs.makeWorldReadable();
+                }
+                prefs.reload();
+                if (!prefs.getBoolean("enable_logging", true)) {
+                    return;
+                }
+
+                String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
+                String logLine = String.format("[%s] Package: %s | Activity: %s\n", time, packageName, activityName);
+                
+                java.io.File logFile = new java.io.File("/data/local/tmp/intercept_logs.txt");
+                try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
+                    fw.write(logLine);
+                }
+                logFile.setReadable(true, false);
+                logFile.setWritable(true, false);
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Error in global logging", t);
+        }
+    }
+
+    private void hookTargetApp(XC_LoadPackage.LoadPackageParam lpparam) {
         prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
         prefs.makeWorldReadable();
 
@@ -36,27 +103,6 @@ public class MainHook implements IXposedHookLoadPackage {
                     String activityName = activity.getClass().getName();
                     String packageName = lpparam.packageName;
 
-                    // 日志直接写入 Logcat 和 Xposed 日志，零额外开销
-                    Log.d(TAG, "Activity启动 | " + packageName + " | " + activityName);
-                    XposedBridge.log(TAG + ": Activity启动 | " + packageName + " | " + activityName);
-
-                    // 异步调用 ContentProvider 写日志，全天持久化且不卡主线程
-                    new Thread(() -> {
-                        try {
-                            Bundle extras = new Bundle();
-                            extras.putString("packageName", packageName);
-                            activity.getContentResolver().call(
-                                android.net.Uri.parse("content://com.example.intercept.provider"),
-                                "logActivity",
-                                activityName,
-                                extras
-                            );
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error async logging activity", e);
-                        }
-                    }).start();
-
-                    // 本地读取规则判断是否拦截
                     if (shouldIntercept(activityName, packageName)) {
                         Log.w(TAG, "!! 拦截 !! | " + packageName + " | " + activityName);
                         XposedBridge.log(TAG + ": !! 拦截 !! | " + packageName + " | " + activityName);
