@@ -5,8 +5,12 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -14,16 +18,125 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class MainHook implements IXposedHookLoadPackage {
     private static final String TAG = "ActivityInterceptor";
 
+    // 全局日志专用单线程池（复用线程，避免频繁创建线程的开销）
+    private static final ExecutorService LOG_WRITER = Executors.newSingleThreadExecutor();
+
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        // 全面放弃 system_server 全局 Hook，只在具体 App 进程内拦截，绝对安全！
         if ("android".equals(lpparam.packageName)) {
+            // ===== 全局日志（只看不摸）=====
+            hookSystemServerSafe(lpparam);
             return;
         }
-        
+
+        // ===== 目标 App 拦截（精准狙杀）=====
         Log.d(TAG, "模块已加载到包: " + lpparam.packageName);
         XposedBridge.log(TAG + ": 模块已加载到包: " + lpparam.packageName);
+        hookTargetApp(lpparam);
+    }
 
+    // ==========================================
+    // 第一层：system_server 全局安全日志
+    // 设计原则：afterHookedMethod + 异步 + 三层 try-catch
+    // ==========================================
+
+    private void hookSystemServerSafe(XC_LoadPackage.LoadPackageParam lpparam) {
+        XposedBridge.log(TAG + ": 全局安全日志模块加载到 system_server");
+
+        Class<?> atmsClass = XposedHelpers.findClassIfExists(
+            "com.android.server.wm.ActivityTaskManagerService", lpparam.classLoader);
+        if (atmsClass == null) {
+            atmsClass = XposedHelpers.findClassIfExists(
+                "com.android.server.am.ActivityManagerService", lpparam.classLoader);
+        }
+        if (atmsClass == null) {
+            XposedBridge.log(TAG + ": 未找到 ATMS/AMS 类，全局日志不可用");
+            return;
+        }
+
+        XposedBridge.log(TAG + ": 成功找到调度类: " + atmsClass.getName());
+
+        // 关键安全设计：使用 afterHookedMethod
+        // Activity 启动已经完成后才记录，绝不阻塞或干扰启动流程
+        XC_MethodHook safeLogHook = new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                    safeLogStartActivity(param);
+                } catch (Throwable ignored) {
+                    // 吞掉一切异常，绝不让 system_server 崩溃
+                }
+            }
+        };
+
+        // 每个方法独立 try-catch，某个方法不存在不影响其他
+        try { XposedBridge.hookAllMethods(atmsClass, "startActivity", safeLogHook); } catch (Throwable ignored) {}
+        try { XposedBridge.hookAllMethods(atmsClass, "startActivityAsUser", safeLogHook); } catch (Throwable ignored) {}
+    }
+
+    private void safeLogStartActivity(XC_MethodHook.MethodHookParam param) {
+        // 安全提取 Intent：逐个参数独立 try-catch，避免触发私有 Parcelable 反序列化
+        android.content.Intent intent = null;
+        for (int i = 0; i < param.args.length; i++) {
+            try {
+                if (param.args[i] instanceof android.content.Intent) {
+                    intent = (android.content.Intent) param.args[i];
+                    break;
+                }
+            } catch (Throwable ignored) {
+                continue; // 这个参数有毒，跳过
+            }
+        }
+        if (intent == null) return;
+
+        // 安全读取 ComponentName（独立 try-catch）
+        String pkg;
+        String cls;
+        try {
+            android.content.ComponentName comp = intent.getComponent();
+            if (comp == null) return; // 隐式 Intent，不记录
+            pkg = comp.getPackageName();
+            cls = comp.getClassName();
+        } catch (Throwable ignored) {
+            return; // 读取失败，放弃这条记录（绝不冒险）
+        }
+        if (pkg == null || cls == null) return;
+
+        // 异步写入日志文件（单线程池，零阻塞 Binder 线程）
+        final String fpkg = pkg;
+        final String fcls = cls;
+        LOG_WRITER.execute(() -> {
+            try {
+                // 尝试读取暂停开关（读不到就默认开启）
+                boolean loggingEnabled = true;
+                try {
+                    XSharedPreferences prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
+                    prefs.makeWorldReadable();
+                    prefs.reload();
+                    loggingEnabled = prefs.getBoolean("enable_logging", true);
+                } catch (Throwable ignored) {}
+
+                if (!loggingEnabled) return;
+
+                String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
+                    java.util.Locale.getDefault()).format(new java.util.Date());
+                String logLine = String.format("[%s] Package: %s | Activity: %s\n", time, fpkg, fcls);
+
+                java.io.File logFile = new java.io.File("/data/system/intercept_logs.txt");
+                try (java.io.FileWriter fw = new java.io.FileWriter(logFile, true)) {
+                    fw.write(logLine);
+                }
+            } catch (Throwable ignored) {
+                // 写入失败也吞掉，绝不影响系统运行
+            }
+        });
+    }
+
+    // ==========================================
+    // 第二层：目标 App 精确拦截（通过 ContentProvider）
+    // ==========================================
+
+    private void hookTargetApp(XC_LoadPackage.LoadPackageParam lpparam) {
         XposedHelpers.findAndHookMethod(
             "android.app.Activity",
             lpparam.classLoader,
@@ -36,23 +149,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     String activityName = activity.getClass().getName();
                     String packageName = lpparam.packageName;
 
-                    // 1. 发起日志记录（异步，不卡主线程）
-                    new Thread(() -> {
-                        try {
-                            Bundle extras = new Bundle();
-                            extras.putString("packageName", packageName);
-                            activity.getContentResolver().call(
-                                Uri.parse("content://com.example.intercept.provider"),
-                                "logActivity",
-                                activityName,
-                                extras
-                            );
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error async logging activity via provider", e);
-                        }
-                    }).start();
-
-                    // 2. 发起拦截检查（同步，必须拦截成功）
+                    // 通过 ContentProvider 同步查询拦截规则
                     boolean intercept = false;
                     try {
                         Bundle extras = new Bundle();
@@ -68,11 +165,10 @@ public class MainHook implements IXposedHookLoadPackage {
                         }
                     } catch (Exception e) {
                         Log.e(TAG, "Error querying provider for rules", e);
-                        // 终极防弹保底：如果 ContentProvider 被小米系统强行断开，激活最原始的硬编码规则！
+                        // 终极保底：ContentProvider 挂了就用硬编码规则
                         XposedBridge.log(TAG + ": 警告 - ContentProvider 查询失败，激活硬编码保底！");
-                        if (activityName.contains("com.miui.securityscan.MainActivity") || 
-                            activityName.contains("com.miui.securityscan.MainEntryActivity") || 
-                            packageName.contains("securitycenter")) {
+                        if (activityName.contains("com.miui.securityscan.MainActivity") ||
+                            activityName.contains("com.miui.securityscan.MainEntryActivity")) {
                             intercept = true;
                         }
                     }

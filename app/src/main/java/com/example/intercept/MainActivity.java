@@ -99,11 +99,13 @@ public class MainActivity extends Activity {
     }
 
     private void fixPrefsPermissions() {
-        try {
-            Runtime.getRuntime().exec(new String[]{"su", "-c", "chmod 666 /data/data/com.example.intercept/shared_prefs/" + PREFS_NAME + ".xml"}).waitFor();
-        } catch (Exception e) {
-            Log.e(TAG, "Error fixing prefs permissions", e);
-        }
+        new Thread(() -> {
+            try {
+                Runtime.getRuntime().exec(new String[]{"su", "-c", "chmod 666 /data/data/com.example.intercept/shared_prefs/" + PREFS_NAME + ".xml"}).waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Error fixing prefs permissions", e);
+            }
+        }).start();
     }
 
     private void saveRules() {
@@ -113,33 +115,37 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "规则已保存，重启目标应用后生效", Toast.LENGTH_SHORT).show();
     }
 
-    private File getLogsFile() {
-        File dir = getFilesDir();
-        File file = new File(dir, "logs.txt");
-        if (!file.exists()) {
-            try { file.createNewFile(); } catch (Exception ignored) {}
-        }
-        return file;
-    }
-
     private void loadLogs() {
         new Thread(() -> {
-            File file = getLogsFile();
-            if (file == null || !file.exists()) {
-                runOnUiThread(() -> tvLogs.setText("暂无日志文件"));
-                return;
-            }
             StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            // 优先读取全局日志（system_server 写入的）
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/intercept_logs.txt 2>/dev/null"});
+                BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
                 String line;
                 while ((line = br.readLine()) != null) {
                     sb.append(line).append("\n");
                 }
+                p.waitFor();
             } catch (Exception e) {
-                Log.e(TAG, "Error reading logs", e);
-                sb.append("读取日志失败: ").append(e.getMessage());
+                Log.e(TAG, "Error reading global logs", e);
             }
-            
+
+            // 如果全局日志为空，尝试读取本地日志（ContentProvider 写入的备用日志）
+            if (sb.length() == 0) {
+                File localLog = new File(getFilesDir(), "logs.txt");
+                if (localLog.exists()) {
+                    try (BufferedReader br = new BufferedReader(new FileReader(localLog))) {
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            sb.append(line).append("\n");
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error reading local logs", e);
+                    }
+                }
+            }
+
             String logsText = sb.toString().trim();
             runOnUiThread(() -> {
                 tvLogs.setText(logsText.isEmpty() ? "暂无日志" : logsText);
@@ -149,12 +155,20 @@ public class MainActivity extends Activity {
 
     private void clearLogs() {
         new Thread(() -> {
-            File file = getLogsFile();
-            if (file != null) {
-                try (FileWriter fw = new FileWriter(file, false)) {
-                    // overwrite with empty content
+            // 清除全局日志
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "echo -n > /data/system/intercept_logs.txt"});
+                p.waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Error clearing global logs", e);
+            }
+            // 清除本地日志
+            File localLog = new File(getFilesDir(), "logs.txt");
+            if (localLog.exists()) {
+                try (FileWriter fw = new FileWriter(localLog, false)) {
+                    // overwrite with empty
                 } catch (Exception e) {
-                    Log.e(TAG, "Error clearing logs", e);
+                    Log.e(TAG, "Error clearing local logs", e);
                 }
             }
             runOnUiThread(() -> {
@@ -163,6 +177,4 @@ public class MainActivity extends Activity {
             });
         }).start();
     }
-
- 
 }

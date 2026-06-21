@@ -31,7 +31,7 @@
             android:name=".ConfigProvider"
             android:authorities="com.example.intercept.provider"
             android:exported="true" />
-            
+
     </application>
 
 </manifest>

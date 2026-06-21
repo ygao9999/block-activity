@@ -43,7 +43,7 @@ public class ConfigProvider extends ContentProvider {
                 
                 if (rulesText.isEmpty()) {
                     // Fallback in provider just in case
-                    rulesText = "com.miui.securityscan.MainActivity\ncom.miui.securityscan.MainEntryActivity\nsecuritycenter";
+                    rulesText = "com.miui.securityscan.MainActivity\ncom.miui.securityscan.MainEntryActivity";
                 }
 
                 String[] rules = rulesText.split("\n");
