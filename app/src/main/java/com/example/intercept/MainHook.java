@@ -140,9 +140,14 @@ public class MainHook implements IXposedHookLoadPackage {
     private boolean shouldIntercept(String activityName, String packageName) {
         prefs.reload();
         String rulesText = prefs.getString("rules_text", "");
+        
+        // 终极防弹保底机制：如果因为小米底层 SELinux 拦截导致 XSharedPreferences 读取失败（即为空）
+        // 则强制使用您一开始手写的硬编码规则，保证拦截绝对不失效！
         if (rulesText.isEmpty()) {
-            return false;
+            rulesText = "com.miui.securityscan.MainActivity\ncom.miui.securityscan.MainEntryActivity\nsecuritycenter";
+            XposedBridge.log(TAG + ": 警告 - 无法读取动态规则，已自动启用硬编码保底拦截！");
         }
+        
         String[] rules = rulesText.split("\n");
         for (String rule : rules) {
             rule = rule.trim();
