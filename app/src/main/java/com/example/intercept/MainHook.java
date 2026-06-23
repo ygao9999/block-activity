@@ -153,12 +153,46 @@ public class MainHook implements IXposedHookLoadPackage {
                     if (shouldIntercept(activity, activityName, packageName)) {
                         Log.w(TAG, "!! 拦截 !! | " + packageName + " | " + activityName);
                         XposedBridge.log(TAG + ": !! 拦截 !! | " + packageName + " | " + activityName);
-                        activity.finish();
-                        activity.finishAndRemoveTask();
+                        
+                        // 核心修复：阻止原 Activity 的 onCreate 继续执行（否则微信会在后台继续初始化播放器）
+                        param.setResult(null);
+                        
+                        enforceInterception(activity);
                     }
                 }
             }
         );
+    }
+
+    private void enforceInterception(Activity activity) {
+        // 1. 强制回到桌面，打断用户视觉和焦点
+        try {
+            android.content.Intent homeIntent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
+            homeIntent.addCategory(android.content.Intent.CATEGORY_HOME);
+            homeIntent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            activity.startActivity(homeIntent);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": 回到桌面失败: " + t.getMessage());
+        }
+
+        // 2. 强制销毁当前页面
+        try {
+            activity.finishAndRemoveTask();
+            activity.finish();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": finish失败: " + t.getMessage());
+        }
+
+        // 3. 强制抢占音频焦点，打断视频号可能在后台播放的声音
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) activity.getSystemService(android.content.Context.AUDIO_SERVICE);
+            if (am != null) {
+                // 申请最高级别的独占音频焦点，迫使其他播放器静音或暂停
+                am.requestAudioFocus(null, android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": 音频抢占失败: " + t.getMessage());
+        }
     }
 
     private boolean shouldIntercept(Activity activity, String activityName, String packageName) {
