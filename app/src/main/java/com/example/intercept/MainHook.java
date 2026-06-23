@@ -163,10 +163,23 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private boolean shouldIntercept(String activityName, String packageName) {
         try {
-            XSharedPreferences prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
-            prefs.makeWorldReadable();
-            prefs.reload();
-            String rulesText = prefs.getString("rules_text", "");
+            String rulesText = "";
+            java.io.File rulesFile = new java.io.File("/data/local/tmp/intercept_rules.txt");
+            if (rulesFile.exists() && rulesFile.canRead()) {
+                StringBuilder sb = new StringBuilder();
+                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(rulesFile));
+                String line;
+                while ((line = br.readLine()) != null) {
+                    sb.append(line).append("\n");
+                }
+                br.close();
+                rulesText = sb.toString();
+            } else {
+                XSharedPreferences prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
+                prefs.makeWorldReadable();
+                prefs.reload();
+                rulesText = prefs.getString("rules_text", "");
+            }
             
             if (rulesText.isEmpty()) {
                 return isHardcodedFallback(activityName, packageName);

@@ -97,6 +97,7 @@ public class MainActivity extends Activity {
         
         etRules.setText(rulesText);
         fixPrefsPermissions();
+        saveRulesToLocalTmp(rulesText);
     }
 
     private void fixPrefsPermissions() {
@@ -126,7 +127,27 @@ public class MainActivity extends Activity {
         String rulesText = etRules.getText().toString();
         prefs.edit().putString("rules_text", rulesText).apply();
         fixPrefsPermissions();
+        saveRulesToLocalTmp(rulesText);
         Toast.makeText(this, "规则已保存，重启目标应用后生效", Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveRulesToLocalTmp(String rulesText) {
+        new Thread(() -> {
+            try {
+                String tmpPath = "/data/local/tmp/intercept_rules.txt";
+                File tempFile = new File(getFilesDir(), "temp_rules.txt");
+                try (FileWriter fw = new FileWriter(tempFile)) {
+                    fw.write(rulesText);
+                }
+                String cmd = "cp " + tempFile.getAbsolutePath() + " " + tmpPath + " && " +
+                             "chown 1000:1000 " + tmpPath + " && " +
+                             "chmod 666 " + tmpPath + " && " +
+                             "(chcon u:object_r:system_data_file:s0 " + tmpPath + " || true)";
+                Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Error saving rules to local tmp", e);
+            }
+        }).start();
     }
 
     private void loadLogs() {
