@@ -137,6 +137,13 @@ public class MainActivity extends Activity {
     private void saveRulesToLocalTmp(String rulesText) {
         new Thread(() -> {
             try {
+                // 终极大招：将规则保存到系统全局设置 (Settings.Global) 中
+                // 这样所有应用（包括微信）都可以直接无视权限读取
+                String commaSeparated = rulesText.replace("\n", ",");
+                String cmdSettings = "settings put global activity_intercept_rules '" + commaSeparated + "'";
+                Runtime.getRuntime().exec(new String[]{"su", "-c", cmdSettings}).waitFor();
+
+                // 原有逻辑保留作为备份
                 String tmpPath = "/data/local/tmp/intercept_rules.txt";
                 File tempFile = new File(getFilesDir(), "temp_rules.txt");
                 try (FileWriter fw = new FileWriter(tempFile)) {
@@ -148,7 +155,7 @@ public class MainActivity extends Activity {
                              "(chcon u:object_r:system_data_file:s0 " + tmpPath + " || true)";
                 Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
             } catch (Exception e) {
-                Log.e(TAG, "Error saving rules to local tmp", e);
+                Log.e(TAG, "Error saving rules to settings or local tmp", e);
             }
         }).start();
     }

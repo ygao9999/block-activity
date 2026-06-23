@@ -162,7 +162,27 @@ public class MainHook implements IXposedHookLoadPackage {
     }
 
     private boolean shouldIntercept(Activity activity, String activityName, String packageName) {
-        // 1. 首选方案：通过 ContentProvider 跨进程查询，完美绕过 SELinux 限制
+        // 0. 终极大招：从系统的 Settings.Global 里拿数据。这玩意存在内存里，不需要任何文件权限，无视一切 SELinux 和隔离！
+        try {
+            String settingsRules = android.provider.Settings.Global.getString(activity.getContentResolver(), "activity_intercept_rules");
+            if (settingsRules != null && !settingsRules.isEmpty()) {
+                String[] rules = settingsRules.split(",");
+                for (String rule : rules) {
+                    rule = rule.trim();
+                    if (rule.isEmpty() || rule.startsWith("#") || rule.startsWith("//")) {
+                        continue;
+                    }
+                    if (activityName.contains(rule) || packageName.contains(rule)) {
+                        return true;
+                    }
+                }
+                return false; // 如果 Settings 里有有效数据，即使没匹配上，也直接返回 false，不用往下走了
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": Settings.Global 查询失败: " + t.getMessage());
+        }
+
+        // 1. 备选方案1：通过 ContentProvider 跨进程查询，完美绕过 SELinux 限制
         try {
             android.net.Uri uri = android.net.Uri.parse("content://com.example.intercept.provider");
             android.os.Bundle extras = new android.os.Bundle();
