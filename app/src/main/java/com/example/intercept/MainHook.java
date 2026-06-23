@@ -150,7 +150,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     String activityName = activity.getClass().getName();
                     String packageName = lpparam.packageName;
 
-                    if (shouldIntercept(activityName, packageName)) {
+                    if (shouldIntercept(activity, activityName, packageName)) {
                         Log.w(TAG, "!! 拦截 !! | " + packageName + " | " + activityName);
                         XposedBridge.log(TAG + ": !! 拦截 !! | " + packageName + " | " + activityName);
                         activity.finish();
@@ -161,7 +161,21 @@ public class MainHook implements IXposedHookLoadPackage {
         );
     }
 
-    private boolean shouldIntercept(String activityName, String packageName) {
+    private boolean shouldIntercept(Activity activity, String activityName, String packageName) {
+        // 1. 首选方案：通过 ContentProvider 跨进程查询，完美绕过 SELinux 限制
+        try {
+            android.net.Uri uri = android.net.Uri.parse("content://com.example.intercept.provider");
+            android.os.Bundle extras = new android.os.Bundle();
+            extras.putString("packageName", packageName);
+            android.os.Bundle result = activity.getContentResolver().call(uri, "shouldIntercept", activityName, extras);
+            if (result != null) {
+                return result.getBoolean("intercept", false);
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": Provider 查询失败: " + t.getMessage());
+        }
+
+        // 2. 备用方案：直接读文件（可能被目标 App 的 SELinux 拦截）
         try {
             String rulesText = "";
             java.io.File rulesFile = new java.io.File("/data/local/tmp/intercept_rules.txt");
@@ -197,7 +211,7 @@ public class MainHook implements IXposedHookLoadPackage {
             }
             return false;
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": 警告 - 读取规则失败，激活硬编码保底！");
+            XposedBridge.log(TAG + ": 警告 - 读取规则失败，激活硬编码保底！异常: " + android.util.Log.getStackTraceString(t));
             return isHardcodedFallback(activityName, packageName);
         }
     }
