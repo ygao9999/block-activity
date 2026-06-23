@@ -166,6 +166,7 @@ public class MainHook implements IXposedHookLoadPackage {
         try {
             String settingsRules = android.provider.Settings.Global.getString(activity.getContentResolver(), "activity_intercept_rules");
             if (settingsRules != null && !settingsRules.isEmpty()) {
+                XposedBridge.log(TAG + ": 成功从 Settings.Global 读取规则: " + settingsRules);
                 String[] rules = settingsRules.split(",");
                 for (String rule : rules) {
                     rule = rule.trim();
@@ -216,6 +217,7 @@ public class MainHook implements IXposedHookLoadPackage {
             }
             
             if (rulesText.isEmpty()) {
+                XposedBridge.log(TAG + ": 警告 - 读取规则失败，激活硬编码保底！");
                 return isHardcodedFallback(activityName, packageName);
             }
             
