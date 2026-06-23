@@ -217,7 +217,7 @@ public class MainHook implements IXposedHookLoadPackage {
             }
             
             if (rulesText.isEmpty()) {
-                XposedBridge.log(TAG + ": 警告 - 读取规则失败，激活硬编码保底！");
+                XposedBridge.log(TAG + ": 警告1 - 读取规则失败，激活硬编码保底！");
                 return isHardcodedFallback(activityName, packageName);
             }
             
@@ -233,7 +233,7 @@ public class MainHook implements IXposedHookLoadPackage {
             }
             return false;
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": 警告 - 读取规则失败，激活硬编码保底！异常: " + android.util.Log.getStackTraceString(t));
+            XposedBridge.log(TAG + ": 警告2 - 读取规则失败，激活硬编码保底！异常: " + android.util.Log.getStackTraceString(t));
             return isHardcodedFallback(activityName, packageName);
         }
     }
