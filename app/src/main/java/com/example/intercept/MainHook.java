@@ -175,7 +175,17 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": 回到桌面失败: " + t.getMessage());
         }
 
-        // 2. 强制销毁当前页面
+        // 2. 强制抢占音频焦点，瞬间静音
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) activity.getSystemService(android.content.Context.AUDIO_SERVICE);
+            if (am != null) {
+                am.requestAudioFocus(null, android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": 音频抢占失败: " + t.getMessage());
+        }
+
+        // 3. 强制销毁当前页面
         try {
             activity.finishAndRemoveTask();
             activity.finish();
@@ -183,15 +193,15 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": finish失败: " + t.getMessage());
         }
 
-        // 3. 强制抢占音频焦点，打断视频号可能在后台播放的声音
+        // 4. 终极物理消灭：直接杀死目标进程！
+        // 微信内部有极强的生命周期保护机制，常规 finish 可能会被其内部框架拦截，或者其底层 Service 依然在播放视频/音频。
+        // 对于拦截而言，最彻底的方式就是直接拔电源！
         try {
-            android.media.AudioManager am = (android.media.AudioManager) activity.getSystemService(android.content.Context.AUDIO_SERVICE);
-            if (am != null) {
-                // 申请最高级别的独占音频焦点，迫使其他播放器静音或暂停
-                am.requestAudioFocus(null, android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
-            }
+            XposedBridge.log(TAG + ": 执行终极物理消灭 (Kill Process)");
+            android.os.Process.killProcess(android.os.Process.myPid());
+            System.exit(0);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": 音频抢占失败: " + t.getMessage());
+            XposedBridge.log(TAG + ": Kill Process 失败: " + t.getMessage());
         }
     }
 
