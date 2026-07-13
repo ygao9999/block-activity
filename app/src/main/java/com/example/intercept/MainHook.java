@@ -150,6 +150,9 @@ public class MainHook implements IXposedHookLoadPackage {
                     String activityName = activity.getClass().getName();
                     String packageName = lpparam.packageName;
 
+                    XposedBridge.log(TAG + ": [调试] onCreate hook 触发 | 包名: " + packageName + " | 类名: " + activityName);
+                    Log.d(TAG, "[调试] onCreate hook 触发 | 包名: " + packageName + " | 类名: " + activityName);
+
                     if (shouldIntercept(activity, activityName, packageName)) {
                         Log.w(TAG, "!! 拦截 !! | " + packageName + " | " + activityName);
                         XposedBridge.log(TAG + ": !! 拦截 !! | " + packageName + " | " + activityName);
@@ -158,6 +161,8 @@ public class MainHook implements IXposedHookLoadPackage {
                         param.setResult(null);
                         
                         enforceInterception(activity);
+                    } else {
+                        XposedBridge.log(TAG + ": [调试] 不拦截该页面 | 包名: " + packageName + " | 类名: " + activityName);
                     }
                 }
             }
@@ -175,17 +180,7 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": 回到桌面失败: " + t.getMessage());
         }
 
-        // 2. 强制抢占音频焦点，瞬间静音
-        try {
-            android.media.AudioManager am = (android.media.AudioManager) activity.getSystemService(android.content.Context.AUDIO_SERVICE);
-            if (am != null) {
-                am.requestAudioFocus(null, android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
-            }
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": 音频抢占失败: " + t.getMessage());
-        }
-
-        // 3. 强制销毁当前页面
+        // 2. 强制销毁当前页面
         try {
             activity.finishAndRemoveTask();
             activity.finish();
@@ -193,24 +188,25 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": finish失败: " + t.getMessage());
         }
 
-        // 4. 终极物理消灭：直接杀死目标进程！
-        // 微信内部有极强的生命周期保护机制，常规 finish 可能会被其内部框架拦截，或者其底层 Service 依然在播放视频/音频。
-        // 对于拦截而言，最彻底的方式就是直接拔电源！
+        // 3. 强制抢占音频焦点，打断视频号可能在后台播放的声音
         try {
-            XposedBridge.log(TAG + ": 执行终极物理消灭 (Kill Process)");
-            android.os.Process.killProcess(android.os.Process.myPid());
-            System.exit(0);
+            android.media.AudioManager am = (android.media.AudioManager) activity.getSystemService(android.content.Context.AUDIO_SERVICE);
+            if (am != null) {
+                // 申请最高级别的独占音频焦点，迫使其他播放器静音或暂停
+                am.requestAudioFocus(null, android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
+            }
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": Kill Process 失败: " + t.getMessage());
+            XposedBridge.log(TAG + ": 音频抢占失败: " + t.getMessage());
         }
     }
 
     private boolean shouldIntercept(Activity activity, String activityName, String packageName) {
+        XposedBridge.log(TAG + ": [调试] 开始检查是否需要拦截 | 包名: " + packageName + " | 类名: " + activityName);
         // 0. 终极大招：从系统的 Settings.Global 里拿数据。这玩意存在内存里，不需要任何文件权限，无视一切 SELinux 和隔离！
         try {
             String settingsRules = android.provider.Settings.Global.getString(activity.getContentResolver(), "activity_intercept_rules");
             if (settingsRules != null && !settingsRules.isEmpty()) {
-                XposedBridge.log(TAG + ": 成功从 Settings.Global 读取规则: " + settingsRules);
+                XposedBridge.log(TAG + ": [调试] 成功从 Settings.Global 读取规则: " + settingsRules);
                 String[] rules = settingsRules.split(",");
                 for (String rule : rules) {
                     rule = rule.trim();
@@ -218,10 +214,14 @@ public class MainHook implements IXposedHookLoadPackage {
                         continue;
                     }
                     if (activityName.contains(rule) || packageName.contains(rule)) {
+                        XposedBridge.log(TAG + ": [调试] Settings.Global 匹配成功 | 命中规则: " + rule);
                         return true;
                     }
                 }
+                XposedBridge.log(TAG + ": [调试] Settings.Global 无匹配规则，直接返回 false");
                 return false; // 如果 Settings 里有有效数据，即使没匹配上，也直接返回 false，不用往下走了
+            } else {
+                XposedBridge.log(TAG + ": [调试] Settings.Global 规则为空或不存在");
             }
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": Settings.Global 查询失败: " + t.getMessage());
@@ -232,9 +232,14 @@ public class MainHook implements IXposedHookLoadPackage {
             android.net.Uri uri = android.net.Uri.parse("content://com.example.intercept.provider");
             android.os.Bundle extras = new android.os.Bundle();
             extras.putString("packageName", packageName);
+            XposedBridge.log(TAG + ": [调试] 尝试通过 ContentProvider 查询规则");
             android.os.Bundle result = activity.getContentResolver().call(uri, "shouldIntercept", activityName, extras);
             if (result != null) {
-                return result.getBoolean("intercept", false);
+                boolean isIntercept = result.getBoolean("intercept", false);
+                XposedBridge.log(TAG + ": [调试] ContentProvider 返回拦截结果: " + isIntercept);
+                return isIntercept;
+            } else {
+                XposedBridge.log(TAG + ": [调试] ContentProvider 返回空 result");
             }
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": Provider 查询失败: " + t.getMessage());
@@ -245,6 +250,7 @@ public class MainHook implements IXposedHookLoadPackage {
             String rulesText = "";
             java.io.File rulesFile = new java.io.File("/data/local/tmp/intercept_rules.txt");
             if (rulesFile.exists() && rulesFile.canRead()) {
+                XposedBridge.log(TAG + ": [调试] 尝试直接从本地文件读取规则: " + rulesFile.getAbsolutePath());
                 StringBuilder sb = new StringBuilder();
                 java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(rulesFile));
                 String line;
@@ -254,6 +260,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 br.close();
                 rulesText = sb.toString();
             } else {
+                XposedBridge.log(TAG + ": [调试] 本地规则文件不存在或不可读，尝试读取 XSharedPreferences");
                 XSharedPreferences prefs = new XSharedPreferences("com.example.intercept", "intercept_config");
                 prefs.makeWorldReadable();
                 prefs.reload();
@@ -262,9 +269,12 @@ public class MainHook implements IXposedHookLoadPackage {
             
             if (rulesText.isEmpty()) {
                 XposedBridge.log(TAG + ": 警告1 - 读取规则失败，激活硬编码保底！");
-                return isHardcodedFallback(activityName, packageName);
+                boolean fallback = isHardcodedFallback(activityName, packageName);
+                XposedBridge.log(TAG + ": [调试] 硬编码保底结果: " + fallback);
+                return fallback;
             }
             
+            XposedBridge.log(TAG + ": [调试] 成功获取规则文本: " + rulesText.replace("\n", " | "));
             String[] rules = rulesText.split("\n");
             for (String rule : rules) {
                 rule = rule.trim();
@@ -272,13 +282,17 @@ public class MainHook implements IXposedHookLoadPackage {
                     continue;
                 }
                 if (activityName.contains(rule) || packageName.contains(rule)) {
+                    XposedBridge.log(TAG + ": [调试] 文件/Prefs 匹配成功 | 命中规则: " + rule);
                     return true;
                 }
             }
+            XposedBridge.log(TAG + ": [调试] 文件/Prefs 无匹配规则");
             return false;
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": 警告2 - 读取规则失败，激活硬编码保底！异常: " + android.util.Log.getStackTraceString(t));
-            return isHardcodedFallback(activityName, packageName);
+            boolean fallback = isHardcodedFallback(activityName, packageName);
+            XposedBridge.log(TAG + ": [调试] 异常保底结果: " + fallback);
+            return fallback;
         }
     }
 
